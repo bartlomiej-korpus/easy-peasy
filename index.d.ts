@@ -186,11 +186,18 @@ export function debug<StateDraft extends object = {}>(
 
 // #region Listeners
 
+type NonListenerProperties =
+  | Action<any, any>
+  | Computed<any, any>
+  | Thunk<any, any>;
+
 type ValidListenerProperties<ActionsModel extends object> = {
   [P in keyof ActionsModel]: P extends IndexSignatureKeysOfType<ActionsModel>
     ? never
     : ActionsModel[P] extends ActionListenerTypes
     ? P
+    : ActionsModel[P] extends NonListenerProperties
+    ? never
     : ActionsModel[P] extends object
     ? IncludesDeep<ActionsModel[P], ActionListenerTypes> extends 1
       ? P
@@ -227,13 +234,22 @@ export type Listeners<Model extends object = {}> = RecursiveListeners<Model>;
 
 // #endregion
 
+/**
+ * Skips 'result' property to avoid cyclic inference dependency when resolving typealiases in TS 4.2+
+ */
+type OmitResult<T> = Omit<T, 'result'>;
+
 // #region Actions
+
+type NonActionProperties = ActionListenerTypes | Computed<any, any>;
 
 type ValidActionProperties<ActionsModel extends object> = {
   [P in keyof ActionsModel]: P extends IndexSignatureKeysOfType<ActionsModel>
     ? never
-    : ActionsModel[P] extends ActionEmitterTypes
+    : ActionsModel[P] extends OmitResult<ActionEmitterTypes>
     ? P
+    : ActionsModel[P] extends NonActionProperties
+    ? never
     : ActionsModel[P] extends object
     ? IncludesDeep<ActionsModel[P], ActionEmitterTypes> extends 1
       ? P
@@ -301,7 +317,7 @@ type StateMapper<StateModel extends object> = {
 };
 
 type RecursiveState<Model extends object> = StateMapper<
-  O.Filter<Model, ActionTypes>
+  O.Filter<Model, OmitResult<ActionTypes>>
 >;
 
 /**
@@ -518,6 +534,7 @@ type Meta = {
  *   addTodo: Thunk<TodosModel, string>;
  * }
  */
+
 export type Thunk<
   Model extends object,
   Payload = undefined,
@@ -528,6 +545,10 @@ export type Thunk<
   type: 'thunk';
   payload: Payload;
   result: Result;
+  // Internal 'fake' properties, they are here to keep inference working in TS 4.2+
+  __model?: Model;
+  __injections?: Injections;
+  __storeModel?: StoreModel;
 };
 
 /**
@@ -614,6 +635,8 @@ export type Action<Model extends object, Payload = void> = {
   type: 'action';
   payload: Payload;
   result: void | State<Model>;
+  // Internal 'fake' properties, they are here to keep inference working in TS 4.2+
+  __model?: Model;
 };
 
 /**
@@ -683,6 +706,9 @@ export type Computed<
 > = {
   type: 'computed';
   result: Result;
+  // Internal 'fake' properties, they are here to keep inference working in TS 4.2+
+  __model?: Model;
+  __storeModel?: StoreModel;
 };
 
 type DefaultComputationFunc<Model extends object, Result> = (
